@@ -1,0 +1,1637 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>AP-Gym.Vision — AI Personal Trainer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;600;700&display=swap"
+    rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
+  <style>
+    :root {
+      --neon: #00ffe7;
+      --neon2: #ff3cac;
+      --gold: #ffd700;
+      --bg: #080c14;
+      --surface: rgba(255, 255, 255, 0.04);
+      --border: rgba(0, 255, 231, 0.18);
+      --text: #e8f4ff;
+      --muted: #5a7a9a;
+      --error: #ff4b6e;
+      --success: #00e676;
+      --radius: 16px;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      height: 100%;
+      font-family: 'Exo 2', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.35;
+    }
+
+    /* ── WELCOME ────────────────────────────────── */
+    #welcome {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      gap: 24px;
+      padding: 20px 16px;
+      overflow-y: auto;
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    #welcome.hidden {
+      opacity: 0;
+      transform: scale(1.04);
+      pointer-events: none;
+    }
+
+    /* ── LOGO ─────────────────────────────────── */
+    .logo-wrap {
+      text-align: center;
+      line-height: 1.05;
+    }
+
+    .logo-mark {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(1.8rem, 6.8vw, 3.4rem);
+      font-weight: 900;
+      letter-spacing: 3px;
+      background: linear-gradient(135deg, var(--neon), var(--neon2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: block;
+    }
+
+    .logo-vision {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(0.85rem, 3vw, 1.6rem);
+      font-weight: 700;
+      letter-spacing: clamp(6px, 2vw, 11px);
+      color: var(--neon2);
+      -webkit-text-fill-color: var(--neon2);
+      display: block;
+      margin-top: 2px;
+    }
+
+    .logo-sub {
+      font-size: clamp(0.6rem, 1.8vw, 0.82rem);
+      color: var(--muted);
+      letter-spacing: 5px;
+      text-transform: uppercase;
+      margin-top: 10px;
+      display: block;
+    }
+
+    /* ── EXERCISE GRID ───────────────────────── */
+    .exercise-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      width: 100%;
+      max-width: 520px;
+    }
+
+    .ex-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 10px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.25s ease;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      min-height: 44px;
+    }
+
+    .ex-card:hover,
+    .ex-card.active {
+      border-color: var(--neon);
+      background: rgba(0, 255, 231, 0.08);
+      box-shadow: 0 0 24px rgba(0, 255, 231, 0.2);
+      transform: translateY(-3px);
+    }
+
+    .ex-card:active {
+      transform: scale(0.96);
+    }
+
+    .ex-card .icon {
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .ex-card .icon svg {
+      width: clamp(26px, 7vw, 36px);
+      height: clamp(26px, 7vw, 36px);
+    }
+
+    .ex-card .name {
+      font-size: clamp(0.62rem, 1.9vw, 0.82rem);
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--neon);
+    }
+
+    .ex-card .desc {
+      font-size: clamp(0.58rem, 1.4vw, 0.7rem);
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .start-btn {
+      background: linear-gradient(135deg, var(--neon), #00b4d8);
+      color: #080c14;
+      border: none;
+      border-radius: 50px;
+      padding: 15px 44px;
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(0.82rem, 2.8vw, 0.98rem);
+      font-weight: 700;
+      letter-spacing: 3px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 32px rgba(0, 255, 231, 0.4);
+      width: 100%;
+      max-width: 320px;
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+    }
+
+    .start-btn svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .start-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 48px rgba(0, 255, 231, 0.6);
+    }
+
+    .start-btn:active {
+      transform: scale(0.97);
+    }
+
+    /* ── MAIN APP ──────────────────────────────── */
+    #app {
+      display: none;
+      flex-direction: column;
+      height: 100%;
+      height: 100dvh;
+    }
+
+    #app.visible {
+      display: flex;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: rgba(8, 12, 20, 0.97);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      z-index: 10;
+      min-height: 48px;
+      gap: 8px;
+    }
+
+    .header-brand {
+      font-family: 'Orbitron', monospace;
+      font-weight: 900;
+      white-space: nowrap;
+      line-height: 1.1;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .header-brand .hb-top {
+      background: linear-gradient(135deg, var(--neon), var(--neon2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-size: clamp(0.62rem, 2vw, 0.88rem);
+      letter-spacing: 2px;
+    }
+
+    .header-brand .hb-bot {
+      color: var(--neon2);
+      -webkit-text-fill-color: var(--neon2);
+      font-size: clamp(0.4rem, 1.2vw, 0.55rem);
+      letter-spacing: 3px;
+    }
+
+    .header-exercise {
+      font-size: clamp(0.57rem, 1.7vw, 0.72rem);
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--neon);
+      background: rgba(0, 255, 231, 0.1);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+      max-width: 118px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .back-btn {
+      font-size: clamp(0.6rem, 1.9vw, 0.73rem);
+      color: var(--muted);
+      cursor: pointer;
+      background: none;
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      border-radius: 20px;
+      transition: all 0.2s;
+      white-space: nowrap;
+      min-height: 32px;
+      min-width: 44px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .back-btn svg {
+      width: 12px;
+      height: 12px;
+      flex-shrink: 0;
+    }
+
+    .back-btn:hover {
+      color: var(--neon);
+      border-color: var(--neon);
+    }
+
+    .back-btn:hover svg {
+      stroke: var(--neon);
+    }
+
+    .back-btn:active {
+      opacity: 0.7;
+    }
+
+    /* ── REC BUTTON ──────────────────────────── */
+    .rec-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: clamp(0.58rem, 1.7vw, 0.7rem);
+      font-family: 'Orbitron', monospace;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.25s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      min-height: 32px;
+    }
+
+    .rec-btn:hover {
+      border-color: var(--error);
+      color: var(--error);
+    }
+
+    .rec-btn:active {
+      opacity: 0.75;
+    }
+
+    .rec-btn.recording {
+      border-color: var(--error);
+      color: var(--error);
+      background: rgba(255, 75, 110, 0.12);
+      box-shadow: 0 0 14px rgba(255, 75, 110, 0.3);
+    }
+
+    .rec-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .rec-btn.recording .rec-dot {
+      background: var(--error);
+      animation: recPulse 1s ease-in-out infinite;
+    }
+
+    @keyframes recPulse {
+
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 0.35;
+        transform: scale(0.7);
+      }
+    }
+
+    /* ── REC BADGE ──────────────────────────── */
+    #rec-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(255, 75, 110, 0.9);
+      color: #fff;
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(0.52rem, 1.7vw, 0.63rem);
+      font-weight: 700;
+      letter-spacing: 2px;
+      padding: 4px 10px;
+      border-radius: 50px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      z-index: 30;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 0 18px rgba(255, 75, 110, 0.5);
+    }
+
+    #rec-badge .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #fff;
+      animation: recPulse 1s ease-in-out infinite;
+    }
+
+    #rec-badge.visible {
+      display: flex;
+    }
+
+    /* ── SAVE TOAST ─────────────────────────── */
+    #save-toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(0, 230, 118, 0.15);
+      border: 1px solid var(--success);
+      color: var(--success);
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(0.55rem, 1.8vw, 0.68rem);
+      font-weight: 700;
+      letter-spacing: 2px;
+      padding: 10px 20px;
+      border-radius: 50px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 500;
+      opacity: 0;
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      white-space: nowrap;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #save-toast svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    #save-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Camera Zone */
+    .cam-zone {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      background: #000;
+      overflow: hidden;
+    }
+
+    #input_video,
+    #output_canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      transform: scaleX(-1);
+    }
+
+    /* Angle HUD */
+    #angle-hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(8, 12, 20, 0.80);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 6px 12px;
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(0.9rem, 3vw, 1.1rem);
+      color: var(--neon);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: none;
+      min-width: 64px;
+      text-align: center;
+    }
+
+    #angle-hud span {
+      font-size: clamp(0.48rem, 1.4vw, 0.58rem);
+      color: var(--muted);
+      display: block;
+      text-align: center;
+      letter-spacing: 1px;
+    }
+
+    /* Feedback */
+    #feedback {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 18px;
+      border-radius: 50px;
+      font-weight: 700;
+      font-size: clamp(0.63rem, 2.4vw, 0.93rem);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      transition: all 0.35s ease;
+      white-space: nowrap;
+      display: none;
+      animation: feedbackPulse 1s ease infinite alternate;
+      max-width: calc(100% - 24px);
+      text-align: center;
+    }
+
+    @keyframes feedbackPulse {
+      from {
+        opacity: 0.85;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    #feedback.good {
+      background: rgba(0, 230, 118, 0.2);
+      border: 1px solid var(--success);
+      color: var(--success);
+    }
+
+    #feedback.bad {
+      background: rgba(255, 75, 110, 0.2);
+      border: 1px solid var(--error);
+      color: var(--error);
+    }
+
+    /* Loader */
+    #loader {
+      position: absolute;
+      inset: 0;
+      background: rgba(8, 12, 20, 0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      z-index: 50;
+    }
+
+    .loader-ring {
+      width: 60px;
+      height: 60px;
+      border: 3px solid var(--border);
+      border-top-color: var(--neon);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .loader-text {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(0.58rem, 1.9vw, 0.72rem);
+      letter-spacing: 3px;
+      color: var(--muted);
+      text-align: center;
+      padding: 0 20px;
+    }
+
+    /* Dashboard */
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      background: rgba(8, 12, 20, 0.98);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .stat-block {
+      padding: 8px 6px;
+      text-align: center;
+      border-right: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-block:last-child {
+      border-right: none;
+    }
+
+    .stat-block::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 10%;
+      right: 10%;
+      height: 2px;
+      background: var(--neon);
+      transform: scaleX(0);
+      transition: transform 0.4s ease;
+      border-radius: 2px;
+    }
+
+    .stat-block.pulse::after {
+      transform: scaleX(1);
+    }
+
+    .stat-val {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(1.4rem, 5vw, 2.2rem);
+      font-weight: 900;
+      color: var(--neon);
+      display: block;
+      line-height: 1;
+      transition: all 0.3s ease;
+    }
+
+    .stat-val.animate {
+      animation: repPop 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+    }
+
+    @keyframes repPop {
+      0% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.45);
+        color: var(--gold);
+      }
+
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    .stat-label {
+      font-size: clamp(0.48rem, 1.4vw, 0.68rem);
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+
+    /* Form ring */
+    .form-ring-wrap {
+      position: relative;
+      width: 44px;
+      height: 44px;
+      margin: 0 auto;
+    }
+
+    .form-ring-wrap svg {
+      transform: rotate(-90deg);
+    }
+
+    .form-ring-val {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(0.52rem, 1.7vw, 0.68rem);
+      font-weight: 700;
+      color: var(--neon);
+    }
+
+    /* History Panel */
+    #history-panel {
+      position: fixed;
+      right: -320px;
+      top: 0;
+      bottom: 0;
+      width: 300px;
+      background: rgba(8, 12, 20, 0.97);
+      border-left: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      z-index: 200;
+      transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      padding: 20px 16px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #history-panel.open {
+      right: 0;
+    }
+
+    .history-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.85rem;
+      letter-spacing: 3px;
+      color: var(--neon);
+      margin-bottom: 16px;
+    }
+
+    .history-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      font-size: 0.8rem;
+    }
+
+    .history-item .hi-exercise {
+      color: var(--neon);
+      font-weight: 700;
+    }
+
+    .history-item .hi-reps {
+      font-size: 1.1rem;
+      font-weight: 900;
+      font-family: 'Orbitron', monospace;
+    }
+
+    .history-item .hi-meta {
+      color: var(--muted);
+      font-size: 0.7rem;
+      margin-top: 2px;
+    }
+
+    .close-history {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      min-width: 44px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .close-history svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .close-history:hover svg {
+      stroke: var(--error);
+    }
+
+    /* Milestone */
+    #milestone {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 60;
+    }
+
+    .milestone-text {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(1.5rem, 6.5vw, 3.8rem);
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--gold), var(--neon2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      opacity: 0;
+      transform: scale(0.5);
+      transition: all 0.35s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+      text-align: center;
+      padding: 0 16px;
+    }
+
+    .milestone-text.show {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .confetti-particle {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      pointer-events: none;
+      animation: confettiFall 1.2s ease-out forwards;
+    }
+
+    @keyframes confettiFall {
+      0% {
+        opacity: 1;
+        transform: translateY(0) rotate(0deg) scale(1);
+      }
+
+      100% {
+        opacity: 0;
+        transform: translateY(160px) rotate(720deg) scale(0.3);
+      }
+    }
+
+    /* ── MOBILE ──────────────────────────────── */
+    @media (max-width: 480px) {
+      #welcome {
+        gap: 16px;
+        padding: 14px 12px;
+        justify-content: flex-start;
+        padding-top: max(28px, env(safe-area-inset-top, 18px));
+      }
+
+      .logo-mark {
+        font-size: clamp(1.55rem, 6.2vw, 2.6rem);
+      }
+
+      .logo-vision {
+        font-size: clamp(0.75rem, 2.6vw, 1.2rem);
+        letter-spacing: 5px;
+      }
+
+      .exercise-grid {
+        gap: 8px;
+      }
+
+      .ex-card {
+        padding: 13px 8px;
+        border-radius: 12px;
+      }
+
+      .ex-card .desc {
+        display: none;
+      }
+
+      .start-btn {
+        padding: 13px 30px;
+      }
+
+      .header {
+        padding: 6px 10px;
+        min-height: 44px;
+      }
+
+      #history-panel {
+        width: 100%;
+        right: -100%;
+      }
+
+      #history-panel.open {
+        right: 0;
+      }
+
+      .dashboard {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .stat-block:nth-child(2) {
+        border-right: none;
+      }
+
+      .stat-block:nth-child(3) {
+        border-top: 1px solid var(--border);
+      }
+
+      .stat-block:nth-child(4) {
+        border-top: 1px solid var(--border);
+        border-right: none;
+      }
+
+      .form-ring-wrap {
+        width: 40px;
+        height: 40px;
+      }
+
+      .form-ring-wrap svg {
+        width: 40px;
+        height: 40px;
+      }
+
+      #angle-hud {
+        top: 8px;
+        left: 8px;
+        padding: 5px 10px;
+        border-radius: 10px;
+      }
+
+      #feedback {
+        bottom: 8px;
+        padding: 7px 14px;
+        max-width: calc(100% - 20px);
+        font-size: 0.67rem;
+      }
+
+      .milestone-text {
+        font-size: 1.5rem;
+      }
+
+      #rec-badge {
+        top: 8px;
+        right: 8px;
+      }
+    }
+
+    @media (max-width: 360px) {
+      #welcome {
+        gap: 12px;
+      }
+
+      .logo-mark {
+        font-size: 1.45rem;
+        letter-spacing: 2px;
+      }
+
+      .logo-vision {
+        font-size: 0.68rem;
+        letter-spacing: 4px;
+      }
+
+      .exercise-grid {
+        gap: 6px;
+      }
+
+      .ex-card {
+        padding: 10px 6px;
+      }
+
+      .ex-card .icon svg {
+        width: 22px;
+        height: 22px;
+      }
+
+      .ex-card .name {
+        font-size: 0.57rem;
+      }
+
+      .start-btn {
+        padding: 12px 24px;
+        font-size: 0.76rem;
+      }
+
+      .stat-val {
+        font-size: 1.3rem;
+      }
+
+      .stat-label {
+        font-size: 0.46rem;
+        letter-spacing: 1px;
+      }
+
+      .header-brand .hb-top {
+        font-size: 0.58rem;
+      }
+
+      .header-brand .hb-bot {
+        font-size: 0.37rem;
+      }
+    }
+
+    @media (max-height: 430px) and (orientation: landscape) {
+      #welcome {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 18px;
+        overflow-y: auto;
+      }
+
+      .logo-mark {
+        font-size: 1.55rem;
+        letter-spacing: 2px;
+      }
+
+      .logo-vision {
+        font-size: 0.65rem;
+        letter-spacing: 4px;
+      }
+
+      .exercise-grid {
+        max-width: 360px;
+        gap: 7px;
+      }
+
+      .ex-card {
+        padding: 9px 7px;
+      }
+
+      .ex-card .desc {
+        display: none;
+      }
+
+      .start-btn {
+        padding: 9px 26px;
+        font-size: 0.76rem;
+        min-height: 40px;
+      }
+
+      #app {
+        flex-direction: column;
+      }
+
+      .header {
+        min-height: 40px;
+        padding: 4px 10px;
+      }
+
+      .dashboard {
+        grid-template-columns: repeat(4, 1fr);
+      }
+
+      .stat-block {
+        padding: 5px 4px;
+      }
+
+      .stat-val {
+        font-size: 1.2rem;
+      }
+
+      .stat-label {
+        font-size: 0.46rem;
+      }
+
+      .form-ring-wrap {
+        width: 34px;
+        height: 34px;
+      }
+
+      .form-ring-wrap svg {
+        width: 34px;
+        height: 34px;
+      }
+    }
+
+    @supports (padding: max(0px)) {
+      #welcome {
+        padding-left: max(16px, env(safe-area-inset-left));
+        padding-right: max(16px, env(safe-area-inset-right));
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+      }
+
+      .header {
+        padding-left: max(12px, env(safe-area-inset-left));
+        padding-right: max(12px, env(safe-area-inset-right));
+      }
+
+      .dashboard {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+
+      #history-panel {
+        padding-bottom: max(20px, env(safe-area-inset-bottom));
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ══════════ WELCOME ══════════ -->
+  <div id="welcome">
+
+    <div class="logo-wrap">
+      <span class="logo-mark">AP-GYM.</span>
+      <span class="logo-vision">VISION</span>
+      <span class="logo-sub">AI-Powered Personal Trainer</span>
+    </div>
+
+    <div class="exercise-grid" id="exerciseGrid">
+
+      <!-- Bicep Curl — dumbbell SVG -->
+      <div class="ex-card active" data-ex="bicep">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="10" width="3" height="4" rx="1" stroke="var(--neon)" stroke-width="1.8" />
+            <rect x="19" y="10" width="3" height="4" rx="1" stroke="var(--neon)" stroke-width="1.8" />
+            <rect x="4" y="9" width="3" height="6" rx="1" stroke="var(--neon)" stroke-width="1.8" />
+            <rect x="17" y="9" width="3" height="6" rx="1" stroke="var(--neon)" stroke-width="1.8" />
+            <line x1="7" y1="12" x2="17" y2="12" stroke="var(--neon)" stroke-width="1.8" />
+            <path d="M9 9 Q12 5.5 15 9" stroke="var(--neon2)" stroke-width="1.7" fill="none" />
+          </svg>
+        </div>
+        <div class="name">Bicep Curl</div>
+        <div class="desc">Arm &amp; elbow tracking</div>
+      </div>
+
+      <!-- Squat — barbell squat figure SVG -->
+      <div class="ex-card" data-ex="squat">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="3.5" r="1.5" fill="var(--neon)" />
+            <line x1="7" y1="7.5" x2="17" y2="7.5" stroke="var(--neon2)" stroke-width="2" />
+            <line x1="7" y1="6.8" x2="7" y2="8.2" stroke="var(--neon2)" stroke-width="1.8" />
+            <line x1="17" y1="6.8" x2="17" y2="8.2" stroke="var(--neon2)" stroke-width="1.8" />
+            <line x1="12" y1="5" x2="10" y2="10.5" stroke="var(--neon)" stroke-width="1.8" />
+            <line x1="10" y1="10.5" x2="7" y2="17" stroke="var(--neon)" stroke-width="1.8" />
+            <line x1="10" y1="10.5" x2="14" y2="17" stroke="var(--neon)" stroke-width="1.8" />
+            <line x1="7" y1="17" x2="5.5" y2="20" stroke="var(--neon)" stroke-width="1.8" />
+            <line x1="14" y1="17" x2="15.5" y2="20" stroke="var(--neon)" stroke-width="1.8" />
+          </svg>
+        </div>
+        <div class="name">Squat</div>
+        <div class="desc">Hip &amp; knee tracking</div>
+      </div>
+
+      <!-- Push-Up — plank figure SVG -->
+      <div class="ex-card" data-ex="pushup">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="20" cy="5" r="1.5" fill="var(--neon)" />
+            <line x1="18.6" y1="6.3" x2="5" y2="14" stroke="var(--neon)" stroke-width="1.8" />
+            <line x1="16" y1="8" x2="14" y2="11.5" stroke="var(--neon)" stroke-width="1.8" />
+            <line x1="14" y1="11.5" x2="10.5" y2="10.5" stroke="var(--neon2)" stroke-width="1.8" />
+            <line x1="5" y1="14" x2="4" y2="18.5" stroke="var(--neon)" stroke-width="1.8" />
+            <line x1="7" y1="13" x2="6.2" y2="17.8" stroke="var(--neon)" stroke-width="1.8" />
+            <line x1="3" y1="19" x2="12" y2="19" stroke="var(--muted)" stroke-width="1" />
+          </svg>
+        </div>
+        <div class="name">Push-Up</div>
+        <div class="desc">Elbow &amp; shoulder tracking</div>
+      </div>
+
+    </div>
+
+    <p
+      style="font-size:clamp(0.65rem,1.9vw,0.76rem); color:var(--muted); text-align:center; max-width:320px; line-height:1.6;">
+      Your camera activates to track movements in real-time.<br>
+      <span style="color:var(--neon)">No data leaves your device.</span>
+    </p>
+
+    <!-- START — play triangle SVG -->
+    <button class="start-btn" id="startBtn">
+      <svg viewBox="0 0 24 24" fill="#080c14" stroke="none">
+        <polygon points="6,3 21,12 6,21" />
+      </svg>
+      START SESSION
+    </button>
+
+    <p
+      style="font-size:0.6rem; color:var(--muted); letter-spacing:1px; text-align:center; display:flex; align-items:center; justify-content:center; gap:5px; flex-wrap:wrap;">
+      Powered by AP-Gym.Vision &nbsp;&middot;&nbsp; Mediapipe
+    </p>
+
+  </div>
+
+  <!-- ══════════ MAIN APP ══════════ -->
+  <div id="app">
+    <header class="header">
+
+      <!-- Back — chevron left SVG -->
+      <button class="back-btn" id="backBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
+        EXIT
+      </button>
+
+      <!-- Brand -->
+      <div class="header-brand">
+        <span class="hb-top">AP-GYM.</span>
+        <span class="hb-bot">VISION</span>
+      </div>
+
+      <div style="display:flex; gap:6px; align-items:center; flex-shrink:0">
+        <div class="header-exercise" id="headerExercise">BICEP CURL</div>
+        <button class="rec-btn" id="recBtn">
+          <span class="rec-dot"></span>
+          <span class="rec-label">REC</span>
+        </button>
+      </div>
+
+    </header>
+
+    <div class="cam-zone">
+      <video id="input_video" playsinline muted></video>
+      <canvas id="output_canvas"></canvas>
+
+      <div id="angle-hud">
+        <span>ANGLE</span>
+        <span id="angleVal">&#x2014;&#xB0;</span>
+      </div>
+
+      <div id="rec-badge">
+        <span class="badge-dot"></span>
+        <span>REC</span>
+      </div>
+
+      <div id="loader">
+        <div class="loader-ring"></div>
+        <div class="loader-text">INITIALIZING AP-Gym.Vision</div>
+      </div>
+
+      <div id="feedback"></div>
+
+      <div id="milestone">
+        <div class="milestone-text" id="milestoneText"></div>
+      </div>
+    </div>
+
+    <div class="dashboard">
+      <div class="stat-block" id="repBlock">
+        <span class="stat-val" id="rep_count">0</span>
+        <div class="stat-label">Reps</div>
+      </div>
+      <div class="stat-block">
+        <div class="form-ring-wrap">
+          <svg width="44" height="44" viewBox="0 0 48 48">
+            <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4" />
+            <circle id="formCircle" cx="24" cy="24" r="20" fill="none" stroke="var(--neon)" stroke-width="4"
+              stroke-dasharray="125.7" stroke-dashoffset="0" stroke-linecap="round" />
+          </svg>
+          <div class="form-ring-val" id="form_score">100</div>
+        </div>
+        <div class="stat-label">Form %</div>
+      </div>
+      <div class="stat-block">
+        <span class="stat-val" id="stage_display">&#x2014;</span>
+        <div class="stat-label">Stage</div>
+      </div>
+      <div class="stat-block">
+        <span class="stat-val" id="timer_display">0:00</span>
+        <div class="stat-label">Time</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ HISTORY PANEL ══════════ -->
+  <div id="history-panel">
+    <!-- X close SVG -->
+    <button class="close-history" id="closeHistory">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
+    </button>
+    <div class="history-title">SESSION LOG</div>
+    <div id="historyList">
+      <p style="color:var(--muted);font-size:0.8rem">No sessions yet.</p>
+    </div>
+  </div>
+
+  <!-- ══════════ SAVE TOAST ══════════ -->
+  <div id="save-toast">
+    <!-- checkmark SVG -->
+    <svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round"
+      stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+    VIDEO SAVED TO DOWNLOADS
+  </div>
+
+  <script>
+    /* ─── STATE ─────────────────────────────── */
+    let selectedExercise = 'bicep';
+    let counter = 0, stage = 'down';
+    let formScore = 100, formPenalty = 0;
+    let sessionStartTime = null, timerInterval = null;
+    let lastSpeechTime = 0, lastFeedbackText = '';
+    let sessions = [], poseReady = false, camera = null;
+
+    /* ─── RECORDING STATE ───────────────────── */
+    let mediaRecorder = null, recordedChunks = [];
+    let isRecording = false;
+    let compositeCanvas = null, compositeCtx = null, animFrameId = null;
+
+    /* ─── EXERCISE CONFIGS ─────────────────── */
+    const EXERCISES = {
+      bicep: { label: 'BICEP CURL', points: [12, 14, 16], upAngle: 30, downAngle: 160, formCheck: checkBicepForm },
+      squat: { label: 'SQUAT', points: [24, 26, 28], upAngle: 170, downAngle: 90, formCheck: checkSquatForm },
+      pushup: { label: 'PUSH-UP', points: [12, 14, 16], upAngle: 160, downAngle: 80, formCheck: checkPushupForm },
+    };
+
+    /* ─── DOM ────────────────────────────────── */
+    const videoEl = document.getElementById('input_video');
+    const canvasEl = document.getElementById('output_canvas');
+    const ctx = canvasEl.getContext('2d');
+    const repCountEl = document.getElementById('rep_count');
+    const stageEl = document.getElementById('stage_display');
+    const feedbackEl = document.getElementById('feedback');
+    const angleEl = document.getElementById('angleVal');
+    const angleHud = document.getElementById('angle-hud');
+    const formScoreEl = document.getElementById('form_score');
+    const formCircle = document.getElementById('formCircle');
+    const timerEl = document.getElementById('timer_display');
+    const loaderEl = document.getElementById('loader');
+    const milestoneEl = document.getElementById('milestone');
+    const milestoneText = document.getElementById('milestoneText');
+    const historyPanel = document.getElementById('history-panel');
+    const historyList = document.getElementById('historyList');
+    const repBlock = document.getElementById('repBlock');
+    const headerExEl = document.getElementById('headerExercise');
+    const recBtn = document.getElementById('recBtn');
+    const recBadge = document.getElementById('rec-badge');
+    const saveToast = document.getElementById('save-toast');
+
+    /* ─── INTERACTIONS ───────────────────────── */
+    document.querySelectorAll('.ex-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.ex-card').forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        selectedExercise = card.dataset.ex;
+      });
+    });
+    document.getElementById('startBtn').addEventListener('click', startSession);
+    document.getElementById('backBtn').addEventListener('click', endSession);
+    document.getElementById('closeHistory').addEventListener('click', () => historyPanel.classList.remove('open'));
+    document.addEventListener('click', (e) => {
+      if (historyPanel.classList.contains('open') && !historyPanel.contains(e.target))
+        historyPanel.classList.remove('open');
+    });
+    recBtn.addEventListener('click', () => { if (!poseReady) return; isRecording ? stopRecording() : startRecording(); });
+
+    /* ─── ANGLE ─────────────────────────────── */
+    function calcAngle(a, b, c) {
+      const rad = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+      let angle = Math.abs(rad * 180 / Math.PI);
+      if (angle > 180) angle = 360 - angle;
+      return angle;
+    }
+
+    /* ─── FORM CHECKS ────────────────────────── */
+    function checkBicepForm(lm) {
+      const s = lm[12], h = lm[24];
+      if (calcAngle({ x: h.x, y: h.y - 1 }, h, s) > 20) return { ok: false, msg: "DON'T SWING BACK" };
+      return { ok: true, msg: 'GOOD FORM \u2713' };
+    }
+    function checkSquatForm(lm) {
+      if (lm[26].x < lm[28].x - 0.08) return { ok: false, msg: 'KNEES BEHIND TOES' };
+      if (calcAngle({ x: lm[24].x, y: lm[24].y - 1 }, lm[24], lm[12]) > 45) return { ok: false, msg: 'KEEP CHEST UP' };
+      return { ok: true, msg: 'GOOD FORM \u2713' };
+    }
+    function checkPushupForm(lm) {
+      if (calcAngle(lm[12], lm[24], lm[28]) < 160) return { ok: false, msg: 'KEEP BODY STRAIGHT' };
+      return { ok: true, msg: 'GOOD FORM \u2713' };
+    }
+
+    /* ─── TTS ────────────────────────────────── */
+    function speak(text) {
+      if (Date.now() - lastSpeechTime < 2500) return;
+      const u = new SpeechSynthesisUtterance(text); u.rate = 1.1;
+      window.speechSynthesis.speak(u); lastSpeechTime = Date.now();
+    }
+
+    /* ─── FORM SCORE ─────────────────────────── */
+    function updateFormScore(ok) {
+      if (!ok) formPenalty = Math.min(formPenalty + 1, 60);
+      else formPenalty = Math.max(formPenalty - 0.3, 0);
+      formScore = Math.max(0, Math.round(100 - formPenalty));
+      const color = formScore > 70 ? 'var(--neon)' : formScore > 40 ? 'var(--gold)' : 'var(--error)';
+      formCircle.style.stroke = color;
+      formCircle.style.strokeDashoffset = 125.7 * (1 - formScore / 100);
+      formScoreEl.textContent = formScore;
+      formScoreEl.style.color = color;
+    }
+
+    /* ─── MILESTONE ──────────────────────────── */
+    function showMilestone(msg) {
+      milestoneText.textContent = msg;
+      milestoneText.classList.add('show');
+      spawnConfetti();
+      setTimeout(() => milestoneText.classList.remove('show'), 1800);
+    }
+    function spawnConfetti() {
+      ['#00ffe7', '#ff3cac', '#ffd700', '#00e676', '#ff4b6e'].forEach((col, i) => {
+        for (let k = 0; k < 6; k++) {
+          const p = document.createElement('div');
+          p.className = 'confetti-particle';
+          p.style.cssText = `background:${col};left:${30 + Math.random() * 40}%;top:${20 + Math.random() * 30}%;animation-delay:${Math.random() * 0.4}s;animation-duration:${0.9 + Math.random() * 0.5}s;`;
+          milestoneEl.appendChild(p);
+          setTimeout(() => p.remove(), 1600);
+        }
+      });
+    }
+
+    /* ─── TIMER ──────────────────────────────── */
+    function startTimer() {
+      sessionStartTime = Date.now();
+      timerInterval = setInterval(() => {
+        const e = Math.floor((Date.now() - sessionStartTime) / 1000);
+        timerEl.textContent = `${Math.floor(e / 60)}:${String(e % 60).padStart(2, '0')}`;
+      }, 500);
+    }
+
+    /* ─── SESSION START / END ────────────────── */
+    function startSession() {
+      document.getElementById('welcome').classList.add('hidden');
+      setTimeout(() => {
+        document.getElementById('welcome').style.display = 'none';
+        document.getElementById('app').classList.add('visible');
+      }, 600);
+      headerExEl.textContent = EXERCISES[selectedExercise].label;
+      counter = 0; stage = 'down'; formScore = 100; formPenalty = 0;
+      repCountEl.textContent = '0'; stageEl.textContent = '\u2014';
+      timerEl.textContent = '0:00';
+      formCircle.style.strokeDashoffset = 0; formScoreEl.textContent = '100';
+      startTimer(); initPose();
+    }
+    function endSession() {
+      if (isRecording) stopRecording();
+      if (counter > 0) {
+        const elapsed = sessionStartTime ? Math.floor((Date.now() - sessionStartTime) / 1000) : 0;
+        sessions.unshift({ exercise: EXERCISES[selectedExercise].label, reps: counter, formScore, time: elapsed, timestamp: new Date().toLocaleTimeString() });
+        renderHistory();
+      }
+      clearInterval(timerInterval);
+      if (camera) { try { camera.stop(); } catch (e) { } }
+      poseReady = false;
+      document.getElementById('app').classList.remove('visible');
+      document.getElementById('welcome').style.display = 'flex';
+      requestAnimationFrame(() => document.getElementById('welcome').classList.remove('hidden'));
+      window.speechSynthesis.cancel();
+    }
+
+    /* ─── HISTORY ────────────────────────────── */
+    function renderHistory() {
+      if (!sessions.length) { historyList.innerHTML = '<p style="color:var(--muted);font-size:0.8rem">No sessions yet.</p>'; return; }
+      historyList.innerHTML = sessions.map(s => `
+    <div class="history-item">
+      <div class="hi-exercise">${s.exercise}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+        <span class="hi-reps">${s.reps} reps</span>
+        <span style="color:${s.formScore > 70 ? 'var(--neon)' : s.formScore > 40 ? 'var(--gold)' : 'var(--error)'};font-weight:700;font-family:Orbitron,monospace;font-size:0.85rem">${s.formScore}%</span>
+      </div>
+      <div class="hi-meta">${s.timestamp} &middot; ${Math.floor(s.time / 60)}m ${s.time % 60}s</div>
+    </div>`).join('');
+    }
+
+    /* ════════════════════════════════════════
+       RECORDING ENGINE
+    ════════════════════════════════════════ */
+    function buildCompositeCanvas() {
+      if (compositeCanvas) return;
+      compositeCanvas = document.createElement('canvas');
+      compositeCtx = compositeCanvas.getContext('2d');
+    }
+
+    function drawHUDOntoComposite() {
+      if (!compositeCanvas || !isRecording) return;
+      const W = compositeCanvas.width, H = compositeCanvas.height, c = compositeCtx;
+      c.drawImage(canvasEl, 0, 0, W, H);
+
+      // REC badge
+      c.save();
+      c.fillStyle = 'rgba(255,75,110,0.88)';
+      roundRect(c, W - 90, 10, 78, 26, 13); c.fill();
+      c.beginPath(); c.arc(W - 80, 23, 4, 0, Math.PI * 2); c.fillStyle = '#fff'; c.fill();
+      c.fillStyle = '#fff'; c.font = 'bold 11px Orbitron,monospace';
+      c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText('REC', W - 70, 23);
+      c.restore();
+
+      // AP·GYMVISION watermark
+      c.save();
+      c.fillStyle = 'rgba(0,255,231,0.5)'; c.font = 'bold 9px Orbitron,monospace';
+      c.textAlign = 'left'; c.textBaseline = 'bottom'; c.fillText('AP\u00B7GYMVISION', 10, H - 54);
+      c.restore();
+
+      // Stats bar
+      const barH = 50;
+      c.save();
+      c.fillStyle = 'rgba(8,12,20,0.82)'; c.fillRect(0, H - barH, W, barH);
+      c.strokeStyle = 'rgba(0,255,231,0.18)'; c.lineWidth = 1;
+      for (let i = 1; i < 4; i++) { c.beginPath(); c.moveTo(W * i / 4, H - barH); c.lineTo(W * i / 4, H); c.stroke(); }
+      [{ val: counter, label: 'REPS' }, { val: formScore + '%', label: 'FORM' }, { val: stageEl.textContent, label: 'STAGE' }, { val: timerEl.textContent, label: 'TIME' }]
+        .forEach((s, i) => {
+          const cx = (i + 0.5) * W / 4;
+          c.fillStyle = '#00ffe7'; c.font = 'bold 16px Orbitron,monospace';
+          c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s.val, cx, H - barH + 16);
+          c.fillStyle = '#5a7a9a'; c.font = '8px sans-serif'; c.fillText(s.label, cx, H - barH + 36);
+        });
+      c.restore();
+      animFrameId = requestAnimationFrame(drawHUDOntoComposite);
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+    }
+
+    function startRecording() {
+      buildCompositeCanvas();
+      compositeCanvas.width = canvasEl.width || 640; compositeCanvas.height = canvasEl.height || 480;
+      let stream;
+      try { stream = compositeCanvas.captureStream(30); } catch (e) { stream = canvasEl.captureStream(30); }
+      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        .then(a => a.getAudioTracks().forEach(t => stream.addTrack(t)))
+        .catch(() => { }).finally(() => beginMediaRecorder(stream));
+    }
+
+    function beginMediaRecorder(stream) {
+      recordedChunks = [];
+      const mimes = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+      let mimeType = ''; for (const m of mimes) { if (MediaRecorder.isTypeSupported(m)) { mimeType = m; break; } }
+      mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = saveRecording;
+      mediaRecorder.start(200); isRecording = true;
+      recBtn.classList.add('recording'); recBtn.querySelector('.rec-label').textContent = 'STOP';
+      recBadge.classList.add('visible'); drawHUDOntoComposite();
+    }
+
+    function stopRecording() {
+      if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+      mediaRecorder.stop(); isRecording = false;
+      cancelAnimationFrame(animFrameId);
+      recBtn.classList.remove('recording'); recBtn.querySelector('.rec-label').textContent = 'REC';
+      recBadge.classList.remove('visible');
+    }
+
+    function saveRecording() {
+      if (!recordedChunks.length) return;
+      const mime = mediaRecorder.mimeType || 'video/webm';
+      const ext = mime.includes('mp4') ? 'mp4' : 'webm';
+      const blob = new Blob(recordedChunks, { type: mime });
+      const url = URL.createObjectURL(blob);
+      const now = new Date();
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+      const fname = `APGymVision_${selectedExercise.toUpperCase()}_${counter}reps_${stamp}.${ext}`;
+      const a = document.createElement('a'); a.href = url; a.download = fname;
+      a.style.display = 'none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 8000);
+      recordedChunks = []; showSaveToast();
+    }
+
+    function showSaveToast() { saveToast.classList.add('show'); setTimeout(() => saveToast.classList.remove('show'), 3200); }
+
+    /* ─── POSE ENGINE ────────────────────────── */
+    function initPose() {
+      loaderEl.style.display = 'flex'; angleHud.style.display = 'none';
+      const isMobile = window.innerWidth < 480;
+      const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+      pose.setOptions({ modelComplexity: isMobile ? 0 : 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+      pose.onResults(onResults);
+      camera = new Camera(videoEl, {
+        onFrame: async () => {
+          canvasEl.width = videoEl.videoWidth || 640; canvasEl.height = videoEl.videoHeight || 480;
+          if (compositeCanvas) { compositeCanvas.width = canvasEl.width; compositeCanvas.height = canvasEl.height; }
+          await pose.send({ image: videoEl });
+        },
+        width: isMobile ? 640 : 1280, height: isMobile ? 480 : 720
+      });
+      camera.start().then(() => setTimeout(() => { loaderEl.style.display = 'none'; angleHud.style.display = 'block'; poseReady = true; }, 1800))
+        .catch(err => { loaderEl.querySelector('.loader-text').textContent = 'CAMERA PERMISSION DENIED'; console.error(err); });
+    }
+
+    function onResults(results) {
+      ctx.save(); ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+      ctx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
+      if (!results.poseLandmarks || !poseReady) { ctx.restore(); return; }
+      const lm = results.poseLandmarks, ex = EXERCISES[selectedExercise];
+      const [ai, bi, ci] = ex.points;
+      const angle = Math.round(calcAngle(lm[ai], lm[bi], lm[ci]));
+      angleEl.textContent = angle + '\u00B0';
+
+      if (selectedExercise === 'squat' || selectedExercise === 'pushup') {
+        if (angle > ex.upAngle) { stage = 'up'; stageEl.textContent = 'UP'; }
+        if (angle < ex.downAngle && stage === 'up') { stage = 'down'; counter++; triggerRep(); }
+      } else {
+        if (angle > ex.downAngle) { stage = 'down'; stageEl.textContent = 'DOWN'; }
+        if (angle < ex.upAngle && stage === 'down') { stage = 'up'; counter++; triggerRep(); }
+      }
+
+      const form = ex.formCheck(lm); updateFormScore(form.ok);
+      if (!form.ok) { showFeedback(form.msg, false); speak(form.msg.toLowerCase().replace('\u2713', '')); }
+      else if (counter > 0) showFeedback(form.msg, true);
+      else feedbackEl.style.display = 'none';
+
+      drawCustomSkeleton(lm); ctx.restore();
+    }
+
+    function triggerRep() {
+      repCountEl.textContent = counter;
+      stageEl.textContent = (selectedExercise === 'squat' || selectedExercise === 'pushup') ? 'DOWN' : 'UP';
+      speak(counter.toString());
+      repCountEl.classList.remove('animate'); void repCountEl.offsetWidth; repCountEl.classList.add('animate');
+      setTimeout(() => repCountEl.classList.remove('animate'), 400);
+      repBlock.classList.add('pulse'); setTimeout(() => repBlock.classList.remove('pulse'), 400);
+
+      // Milestone — Unicode symbols (no emojis)
+      if (counter === 5) showMilestone('WARMING UP! \u26A1');
+      if (counter === 10) showMilestone('10 REPS! \u25C6');
+      if (counter === 20) showMilestone('BEAST MODE! \u26A1\u26A1');
+      if (counter === 50) showMilestone('LEGENDARY! \u2605');
+      if (counter % 25 === 0 && counter > 0) showMilestone(`${counter} REPS! \u2605`);
+    }
+
+    function showFeedback(msg, isGood) {
+      if (msg === lastFeedbackText && feedbackEl.style.display !== 'none') return;
+      lastFeedbackText = msg; feedbackEl.style.display = 'block';
+      feedbackEl.textContent = msg; feedbackEl.className = isGood ? 'good' : 'bad';
+    }
+
+    /* ─── SKELETON ───────────────────────────── */
+    const SKELETON_PAIRS = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [24, 26], [25, 27], [26, 28], [27, 29], [28, 30], [29, 31], [30, 32]];
+
+    function drawCustomSkeleton(lm) {
+      SKELETON_PAIRS.forEach(([i, j]) => {
+        const p1 = lm[i], p2 = lm[j];
+        if (!p1 || !p2 || p1.visibility < 0.4 || p2.visibility < 0.4) return;
+        const x1 = p1.x * canvasEl.width, y1 = p1.y * canvasEl.height, x2 = p2.x * canvasEl.width, y2 = p2.y * canvasEl.height;
+        const g = ctx.createLinearGradient(x1, y1, x2, y2);
+        g.addColorStop(0, 'rgba(0,255,231,0.85)'); g.addColorStop(1, 'rgba(255,60,172,0.85)');
+        ctx.beginPath(); ctx.strokeStyle = g; ctx.lineWidth = 3; ctx.lineCap = 'round';
+        ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      });
+      lm.forEach((p, idx) => {
+        if (p.visibility < 0.4) return;
+        const x = p.x * canvasEl.width, y = p.y * canvasEl.height;
+        const isKey = EXERCISES[selectedExercise].points.includes(idx);
+        ctx.beginPath(); ctx.arc(x, y, isKey ? 7 : 4, 0, Math.PI * 2);
+        ctx.fillStyle = isKey ? 'rgba(255,215,0,0.95)' : 'rgba(0,255,231,0.7)'; ctx.fill();
+        if (isKey) { ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,215,0,0.4)'; ctx.lineWidth = 2; ctx.stroke(); }
+      });
+    }
+  </script>
+</body>
+
+</html>
